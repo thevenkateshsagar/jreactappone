@@ -34,17 +34,22 @@ pipeline {
         stage('Deploy to EC2') {
             steps {
                 script {
-                    // Using SSH credentials configured in Jenkins
-                    sshagent(credentials: ['ec2-ssh-credentials']) {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-credentials', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
                         sh '''
+                            # Set proper permissions for SSH key
+                            chmod 600 $SSH_KEY
+                            
+                            # Define EC2 details
+                            EC2_HOST="54.87.89.63"
+                            
                             # Remove old files from EC2
-                            ssh -o StrictHostKeyChecking=no ubuntu@54.87.89.63 "sudo rm -rf /var/www/react-app/*"
+                            ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$EC2_HOST "sudo rm -rf /var/www/react-app/*"
                             
                             # Copy new build files to EC2
-                            scp -o StrictHostKeyChecking=no -r dist/* ubuntu@54.87.89.63:/tmp/
+                            scp -i $SSH_KEY -o StrictHostKeyChecking=no -r dist/* $SSH_USER@$EC2_HOST:/tmp/
                             
                             # Move files to nginx directory with proper permissions
-                            ssh -o StrictHostKeyChecking=no ubuntu@54.87.89.63 "sudo mv /tmp/* /var/www/react-app/ && sudo chown -R www-data:www-data /var/www/react-app && sudo systemctl restart nginx"
+                            ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$EC2_HOST "sudo mv /tmp/* /var/www/react-app/ && sudo chown -R www-data:www-data /var/www/react-app && sudo systemctl restart nginx"
                         '''
                     }
                 }
@@ -53,9 +58,7 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-                script {
-                    sh 'curl -f http://54.87.89.63 || exit 1'
-                }
+                sh 'curl -f http://54.87.89.63 || exit 1'
             }
         }
     }
